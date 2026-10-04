@@ -81,3 +81,9 @@
 R4 主插件只保留 cron/generic，不包含 HTTP 拦截或 MitM。临时获取插件使用独立 `http-request requires-body=false`，只读状态请求 URL 和请求头，保存候选凭据后原样 `$done({})` 放行；不读取 App 响应、没有密码库或额外请求。候选由独立运行的状态查询验证后才替换旧会话。依据为 [Loon 官方脚本类型](https://nsloon.app/docs/Script/)和 [Script API](https://nsloon.app/docs/Script/script_api/)。获取仍需要临时 MitM，必须获取后关闭。
 
 R3 用户日志另有普通签到业务码 420000，未获得可信定义。100014/420000 自动签到失败尚未解决。R4 手机页面恢复及临时获取兼容性待实测；52 项本地模拟测试只能证明逻辑和模拟 API 下的放行行为。
+
+## R5：单订阅与功能开关
+
+用户要求在同一插件页面手动控制各功能。依据 [Loon 官方插件文档](https://nsloon.app/docs/Plugin/)（Build 733+），使用 `[Argument]` 的 switch，分别以 `enable={capture_enabled}`、`enable={auto_enabled}`、`enable={manual_enabled}` 绑定三条脚本。获取默认 false，另两项默认 true；获取还传入 `argument=[{capture_enabled}]`，脚本仅接受明确 true，关闭或异常参数原样放行。旧独立获取插件保留兼容，但单订阅用户应停用它。
+
+合并版需要声明 `miniapp.yaduo.com`。官方 MitM 文档仅记载 hostname、通配及排除，并未确认同一布尔参数能控制域名；未编造条件域名语法。关闭获取脚本不移除 MitM 声明，不能沿用 R4 日常版“无 MitM”的结论。54 项模拟测试通过；手机开关显示、MitM 兼容性和 100014/420000 签到原因仍待验证。

@@ -6759,7 +6759,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
 (async function () {
   "use strict";
   var TITLE = "亚朵签到";
-  var VERSION = "2026.10.04.4";
+  var VERSION = "2026.10.04.5";
   var KEY = "atour_loon_session_v1";
   var CANDIDATE_KEY = "atour_loon_candidate_v1";
   var BASE = "https://miniapp.yaduo.com";
@@ -6974,7 +6974,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     if (reply.code === 100042) tell("需要人工验证", "请在亚朵 App 完成验证码和今日签到。脚本已停止，不会重放验证信息。");
     else if (reply.code === 10002 || reply.http === 401 || reply.http === 403) tell("需要重新登录", "请在亚朵 App 重新登录并打开签到页面，更新 Loon 中的登录信息。");
     else if (reply.error) tell(phase, reply.error + "；请打开 App 核对签到状态。");
-    else if (phase === "查询失败" && session && session.capturedWithDynamicSign) tell("普通查询未通过 · R4", "接口业务码 " + reply.code + "；已保存登录信息，但普通查询未通过，未提交签到。该请求可能仍需要动态签名适配，请在 App 完成今日签到。");
+    else if (phase === "查询失败" && session && session.capturedWithDynamicSign) tell("普通查询未通过 · R5", "接口业务码 " + reply.code + "；已保存登录信息，但普通查询未通过，未提交签到。该请求可能仍需要动态签名适配，请在 App 完成今日签到。");
     else tell(phase, "接口业务码 " + reply.code + (reply.messageTags && reply.messageTags.length ? "；错误关键词标签 " + reply.messageTags.join(",") : "；错误文字未命中已知标签") + "；请在 App 核对。标签与运行阶段已记录在日志中。");
   }
   async function run() {
@@ -6982,7 +6982,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     var session = candidateRaw ? readSession(CANDIDATE_KEY) : readSession();
     trace("session.source", "source=" + (candidateRaw ? "candidate" : "validated_or_legacy"));
     trace("session.load", "result=" + (session ? "found" : "missing_or_invalid") + (session ? " capturedWithDynamicSign=" + !!session.capturedWithDynamicSign : ""));
-    if (!session) { tell("尚未获取有效登录信息", "请临时启用“亚朵获取登录信息”插件并打开 App 签到页；收到候选信息通知后关闭获取插件，再手动运行签到。"); return; }
+    if (!session) { tell("尚未获取有效登录信息", "请临时开启插件页面里的“获取登录信息”，打开 App 签到页；收到候选信息通知后关闭该开关，再手动运行签到。"); return; }
     var first = await get(session, INDEX);
     if (first.error || first.code !== 0) { problem(first, "查询失败", session); return; }
     var signed = complete(first.result);
@@ -6990,7 +6990,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     if (signed === null) { tell("查询结果无法识别", "今日状态字段缺失或变化，需要更新适配；未提交签到。"); return; }
     if (candidateRaw) {
       if ($persistentStore.read(CANDIDATE_KEY) !== candidateRaw) {
-        tell("登录信息已变化", "查询期间获取了新的登录信息；未提交签到，请关闭获取插件后重新运行。"); return;
+        tell("登录信息已变化", "查询期间获取了新的登录信息；未提交签到，请关闭获取功能后重新运行。"); return;
       }
       session.validatedAt = Date.now();
       if (!$persistentStore.write(JSON.stringify(session), KEY)) {
@@ -7015,7 +7015,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
   }
   try {
     trace("start", "mode=" + (intercept ? "capture" : "checkin"));
-    if (intercept) trace("capture.disabled", "reason=legacy_rule 请更新为 R4 插件；本脚本仅用于手动或定时运行");
+    if (intercept) trace("capture.disabled", "reason=legacy_rule 请更新为 R5 插件；本脚本仅用于手动或定时运行");
     else await run();
   } catch (_) {
     tell("脚本运行异常", "请核对本地脚本和配置；登录信息不会写入通知或日志。");

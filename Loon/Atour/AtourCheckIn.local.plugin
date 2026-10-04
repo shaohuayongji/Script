@@ -1,6 +1,15 @@
 #!name=亚朵签到（本地脚本）
-#!desc=R4：仅手动和定时运行，不拦截 App 流量。兼容已保存的登录信息；每日 08:40 尝试签到，验证码需在 App 完成。
+#!desc=R5：获取、自动、手动签到合并。插件页面可分别开关；获取默认关闭，获取后及时关闭。每日 08:40 运行，验证码需在 App 完成。
+
+[Argument]
+capture_enabled = switch,false,tag=获取登录信息（临时）,desc=仅首次获取或登录失效时开启；保存候选信息后关闭此开关。
+auto_enabled = switch,true,tag=自动签到,desc=每天设备本地时间 08:40 运行。
+manual_enabled = switch,true,tag=手动签到,desc=显示“亚朵签到（手动）”入口。
 
 [Script]
-cron "40 8 * * *" script-path=atour.loon.js,timeout=90,tag=亚朵签到,enable=true
-generic script-path=atour.loon.js,timeout=90,tag=亚朵签到（手动）,enable=true
+http-request ^https://miniapp\.yaduo\.com/atourlife/signIn/indexInfoV2(?:\?|$) script-path=atour.capture.js,requires-body=false,timeout=5,tag=亚朵获取登录信息,argument=[{capture_enabled}],enable={capture_enabled}
+cron "40 8 * * *" script-path=atour.loon.js,timeout=90,tag=亚朵签到,enable={auto_enabled}
+generic script-path=atour.loon.js,timeout=90,tag=亚朵签到（手动）,enable={manual_enabled}
+
+[Mitm]
+hostname=miniapp.yaduo.com
