@@ -1,89 +1,58 @@
 # 亚朵签到 · Loon 远程插件
 
-插件与脚本托管在 `shaohuayongji/Script`，本目录为 `Loon/Atour`。无需单独导入本地 JavaScript 文件，插件的三条规则都引用同一个远程脚本。
+## R4：优先修复 App 页面受影响的问题
 
-## 订阅链接
+用户对照截图显示：R3 插件开启时，签到日历、拼图和按钮加载不完整；关闭插件后正常。具体机制尚未定位，不能把本地模拟中的“原样放行”等同于手机上的实际兼容性。
 
-复制以下完整地址，在 Loon 的插件管理中添加远程插件并启用：
+R4 将日常签到与临时获取分开：**签到插件没有 HTTP 拦截规则，也没有 MitM 域名声明**；仅手动/每天 08:40 执行。获取插件改用约 5 KB 的独立请求脚本，不加载密码库、不读取请求或响应正文、不发额外网络请求。存储、日志或通知出错时仍调用 `$done({})` 放行原请求。获取仍需临时 MitM，手机兼容性须实测，获取后关闭。
+
+**已经用 R3 保存过登录信息的用户，无需重新获取。** 先更新原签到插件，确认描述以 R4 开头；停用所有旧版或重复的抓取规则。关闭并重新打开 App 签到页，先确认页面恢复。若暂不测试自动签到，也可关闭“亚朵签到”的 cron 规则，仅保留手动入口。
+
+## 远程订阅
+
+日常启用：[亚朵签到插件](https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/AtourCheckIn.plugin)
 
 ```text
 https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/AtourCheckIn.plugin
 ```
 
-[打开插件文件](https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/AtourCheckIn.plugin) · [查看脚本](https://github.com/shaohuayongji/Script/blob/master/Loon/Atour/atour.loon.js)
-
-## R3 更新（2026-10-04）
-
-用户提供的 R2 运行日志确认：登录信息可用于普通状态查询，返回 HTTP 200、业务码 0、今日未签到；普通签到请求返回 HTTP 200、业务码 100014。当前未找到该码的可靠定义，不能仅凭数字判断签名或验证码原因，尚未验证完整自动签到成功。
-
-R3 在日志中增加 `retmsgPresent` 和 `retmsgTags`：只按服务器错误文字里的关键词输出固定标签，不输出错误原文。`signature` 表示文本命中签名，`verification` 表示验证，`parameters` 表示参数，`risk_control` 表示风险，`server` 表示服务异常；`unclassified` 表示没有命中。标签是文本线索，不是业务码定义，也不表示已经证实问题原因。捕获日志还会记录签名/设备头是否存在、验证码头的固定字段名，所有值仍隐藏。可用来对比 App 正常签到请求。签到业务拒绝会明确提示“签到请求未通过”，不会自动重试。
-
-## R2 更新（2026-10-04）
-
-旧版只要看到 `At-Client-Sign` 就拒绝保存登录信息。R2 将它移除后保存登录信息，运行时先由服务器的普通状态查询确认可用性；查询失败即停止，不会提交签到。其他可疑查询字段会显示名称供排查。
-
-在 Loon 更新本插件，确认描述以 **R3** 开头。远程脚本地址带 `?v=20261004-3`，用于刷新旧缓存。重新进入 App 签到页获取信息，再运行新增的 **亚朵签到（手动）**。日志首行应包含 `[ATOUR 2026.10.04.3`。
-
-## 首次配置
-
-1. 在 Loon 中添加上面的远程插件，确认 **亚朵签到** 插件已启用，三条脚本规则均加载成功。
-2. 启用脚本/重写和 MitM；安装并信任 Loon 自己生成的 MitM 证书，启动 Loon 连接。插件声明了 `miniapp.yaduo.com`，已有自定义配置时确认该域名未被排除。
-3. 打开并登录 **亚朵 App**，进入会员签到页“签到集拼图”。查询成功后应收到 **登录信息已保存** 通知。仍未获取时，可通过 App 的正常流程手动签到一次，成功响应也能保存会话。
-4. 在 Loon 的脚本列表中找到 **亚朵签到（手动）**，使用运行按钮执行。当天若已在 App 签过，显示“今日已签到”只能验证查询；次日未签到时再测试，才能确认你的账号是否接受普通自动签到请求。
-5. 每天设备本地时间 **08:40** 自动运行。保持设备联网和 Loon 运行；上海时区下为北京时间 08:40。
-
-如果此前已添加本地配置或同功能插件，请停用旧的定时/抓取规则，避免重复运行。旧版保存的 `atour_loon_session_v1` 可继续使用，无需把凭据填写到 GitHub。
-
-## 验证码与会话失效
-
-**官方签到页包含极验验证流程，不能保证完全无人值守。** 脚本先查今日状态，未完成时仅尝试一次普通签到，随后再查询确认；服务要求验证码时停止并提醒在 App 正常完成。不会伪造动态签名、验证码结果或重放一次性验证头。
-
-- **今日已签到**：服务器状态查询确认，未重复提交。
-- **签到成功**：提交后状态查询确认今日完成。
-- **需要人工验证**：去亚朵 App 完成验证码和签到。
-- **需要重新登录**：回 App 登录并重新进入签到页，更新本地会话。
-- **登录信息已保存，待验证 · R3**：已移除 `At-Client-Sign`；手动运行以确认普通请求可用。
-- **普通查询未通过 · R3**：服务器拒绝了普通查询，未提交签到；按业务码继续核查，可能需要签名适配。
-- **需要参数适配 · R3**：查询字符串含可疑签名/时效/验证字段，未保存；通知只显示字段名，便于排查。
-- **签到结果待确认**：响应丢失、异常或复查未确认；在 App 核对，脚本不会反复提交。
-
-登录 token、Cookie 和必要设备头只保存在手机的 Loon 本地；仓库和通知不保存真实凭据。排查只需提供通知文字、HTTP 状态或业务码，不要分享完整请求或本地存储。
-
-## 失败时如何提供日志
-
-在 Loon 找到 **亚朵签到（手动）**，执行后打开该脚本的运行日志，复制从 `start mode=checkin` 到 `finish mode=checkin` 的内容。获取登录信息时出错，则提供 **亚朵获取登录信息** 中从 `start mode=capture` 到 `finish mode=capture` 的日志。不同 Loon 版本的入口位置可能不同，以脚本详情里的日志/运行记录入口为准。
-
-每一行包含脚本版本和本次运行编号，记录获取/查询/签到阶段、HTTP 状态、业务码、加密类型、错误文字关键词标签，以及服务返回的今日签到状态。可疑查询字段仅记录已知字段名。不会记录请求 URL、Token、Cookie、签名值、验证码值、账号资料、响应正文或原始网络错误。
-
-例如下面是**模拟的验证码失败日志**，不是实际账号结果：
+**仅在首次获取或登录失效时临时启用**：[亚朵获取登录信息插件](https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/AtourCapture.plugin)
 
 ```text
-[ATOUR 2026.10.04.3 abc123] start mode=checkin
-[ATOUR 2026.10.04.3 abc123] request.response endpoint=indexInfoV2 HTTP=200 encryption=none
-[ATOUR 2026.10.04.3 abc123] request.decode endpoint=indexInfoV2 retcode=0
-[ATOUR 2026.10.04.3 abc123] state.before todaySigned=false
-[ATOUR 2026.10.04.3 abc123] request.decode endpoint=signIn retcode=100042
-[ATOUR 2026.10.04.3 abc123] finish mode=checkin
+https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/AtourCapture.plugin
 ```
 
-这些脚本日志可用于反馈。请不要开启全量 HTTP 抓包后发送完整请求，也不要发送 Loon 本地存储内容。
+不要同时保留旧 R1/R2/R3 插件和新版；旧版包含响应拦截规则。原订阅地址不变，R4 脚本 URL 带 `?v=20261004-4` 刷新缓存。日常日志版本应为 `[ATOUR 2026.10.04.4`。
 
-## 更新与验证范围
+## 首次获取与日常运行
 
-订阅和脚本地址使用 `master` 分支。仓库更新后，在 Loon 中更新插件，并确认远程脚本同步到最新版本；GitHub Raw 可能短暂缓存。若无法下载，先确认设备能访问 `raw.githubusercontent.com`。
+1. 添加并启用“亚朵签到”远程插件，确认两条规则“亚朵签到”和“亚朵签到（手动）”加载成功。此插件不需要抓取或 MitM。
+2. 尚无登录信息时，添加并临时启用“亚朵获取登录信息”插件。开启脚本及 MitM，安装并信任 Loon 自己生成的证书；连接 Loon，登录亚朵 App，打开“签到集拼图”。该插件仅匹配 `miniapp.yaduo.com` 的 `indexInfoV2` 状态请求。
+3. 收到“候选登录信息已保存 · R4”后，**关闭整个获取插件**。无需点击 App 签到，也不要长期启用获取插件。若开启它仍导致页面异常，立即关闭，并反馈获取脚本日志。
+4. 在 Loon 的脚本列表中找到“亚朵签到（手动）”，使用运行按钮执行。先查询服务器状态，候选信息有效且状态可识别时才替换旧会话；验证失败保留旧会话并停止本次运行，不会转用旧账号提交。
+5. 日常只启用签到插件；设备本地时间每天 08:40 运行。当天已经在 App 签到时仅查状态，未签到时尝试一次普通签到，再查询确认。验证码需在 App 正常完成。
 
-2026-10-04：本地 **52 项模拟测试通过**，已核对官方公开前端和匿名只读接口。用户日志已确认真实账号状态查询成功，但普通签到提交返回 100014；尚未验证完整自动签到成功，合成加密样本也不代表真实账号加密响应。首次使用须手动验证。
+旧 `atour_loon_session_v1` 会话继续使用；候选信息单独保存在 `atour_loon_candidate_v1`，不会在打开 App 时直接覆盖旧会话。候选信息通知表示已保存请求中的凭据，不代表登录有效或签到成功。
 
-公开接口依据及历史脚本核查见 [source-notes.md](source-notes.md)，测试边界见 [verification.md](verification.md)。[第三方标准库与许可](THIRD_PARTY_NOTICES.md)随单文件脚本内置保留。[本地安装方式](LOCAL-INSTALL.md)可作为不用远程订阅时的备选。
+## 当前可用性与失败日志
 
-源码、固定依赖与测试保存在 [atour-source.zip](atour-source.zip)。下载并解压后，可读主逻辑在 `src/atour-main.js`。本地维护流程：
+用户真实 R3 日志确认：普通状态查询 HTTP 200、retcode 0、todaySigned false；普通签到返回 **100014 或 420000**。尚无可靠业务码定义或完整自动签到成功记录。R4 修复的是插件结构与 App 流量干扰风险，**没有宣称解决这些签到业务拒绝**。官方页面有极验流程，不能保证无人值守签到成功。
+
+脚本仍保留固定错误标签、HTTP 状态、业务码、运行阶段与随机运行编号。`retmsgTags=unclassified` 只表示错误文字未命中预设关键词；标签不能当成业务码定义。不会输出完整 URL、Token、Cookie、签名、验证码、姓名、手机号、服务器原文或原始网络错误。
+
+提供日志时：手动脚本复制从 `start mode=checkin` 到 `finish mode=checkin`；临时获取脚本复制从 `start mode=capture_request` 到 `finish mode=capture_request`。不同 Loon 版本入口位置不同，以脚本详情中的日志/运行记录为准。不要发送完整 HTTP 抓包或本地存储。
+
+## 验证与维护
+
+2026-10-04：52 项本地模拟测试通过，覆盖请求放行、正文不读取、本地 API 异常、候选会话验证与竞争更新、旧会话兼容、签到前后状态确认、AES/SM2 解密、失败停止和日志隐私。模拟测试不是 iPhone Loon 页面恢复或真实签到成功证明。
+
+源码、固定依赖和测试位于 `atour-source.zip`；本地安装见 [LOCAL-INSTALL.md](LOCAL-INSTALL.md)。依据见 [source-notes.md](source-notes.md)，验证边界见 [verification.md](verification.md)，内置密码库许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ```sh
 node build.cjs
 node --check atour.loon.js
+node --check atour.capture.js
 node --test tests/atour.test.cjs
 ```
 
-手动入口使用 Loon 官方文档中的 [generic 脚本类型](https://nsloon.app/docs/Script/#generic)。
-
-Loon 格式依据：[官方插件文档](https://github.com/Loon0x00/LoonManual/blob/master/docs/cn/plugin.md)、[脚本类型](https://github.com/Loon0x00/LoonManual/blob/master/docs/cn/script.md)。
+配置参考：[Loon 官方脚本类型](https://nsloon.app/docs/Script/)、[Script API](https://nsloon.app/docs/Script/script_api/)。

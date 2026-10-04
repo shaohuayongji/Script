@@ -1,10 +1,6 @@
 #!name=亚朵签到
-#!desc=R3：日志增加错误关键词标签，隐藏原文与凭据。每日 08:40 查询并尝试签到；支持“亚朵签到（手动）”，验证码需在 App 完成。
+#!desc=R4：仅手动和定时运行，不拦截 App 流量。兼容已保存的登录信息；每日 08:40 尝试签到，验证码需在 App 完成。
 
 [Script]
-http-response ^https://miniapp\.yaduo\.com/atourlife/signIn/(?:indexInfoV2|signIn)(?:\?|$) script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js?v=20261004-3,requires-body=true,binary-body-mode=false,timeout=10,tag=亚朵获取登录信息,enable=true
-cron "40 8 * * *" script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js?v=20261004-3,timeout=90,tag=亚朵签到,enable=true
-generic script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js?v=20261004-3,timeout=90,tag=亚朵签到（手动）,enable=true
-
-[Mitm]
-hostname=miniapp.yaduo.com
+cron "40 8 * * *" script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js?v=20261004-4,timeout=90,tag=亚朵签到,enable=true
+generic script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js?v=20261004-4,timeout=90,tag=亚朵签到（手动）,enable=true

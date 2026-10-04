@@ -73,3 +73,11 @@
 用户提供 R2 手动运行日志，包含 `capturedWithDynamicSign=true`，普通状态查询 `indexInfoV2` 返回 HTTP 200、无响应加密、retcode 0、todaySigned false；随后普通 `signIn` 返回 HTTP 200、无响应加密、retcode 100014，脚本停止。该日志能确认此账号的普通状态查询可用及本次签到业务拒绝，不能证明签到成功或失败的确切原因。
 
 再次检索官方公开 App H5 主文件、签到页与 vendors，未找到 100014 的明确处理或定义；公开 GitHub 搜索也未找到可作为可靠解释的匹配。本次未发送任何新的真实账号或匿名签到请求。R3 增加错误文字的固定关键词标签，不输出 retmsg 原文，不将 100014 硬编码为某个错误；仍需用户运行日志或 App 正常签到结果帮助进一步区分原因。
+
+## R4：用户 App 对照截图触发的流量隔离修正
+
+用户反馈旧插件开启时日历、拼图和按钮未正常加载，关闭后恢复。旧版使用 `http-response requires-body=true` 并在捕获过程中初始化密码库、读取和解析响应；VM 中输入不变不代表真实 Loon 的响应截获兼容。暂未确定是缓冲、解码、超时、MitM 或其他具体机制，不能声称已定位。
+
+R4 主插件只保留 cron/generic，不包含 HTTP 拦截或 MitM。临时获取插件使用独立 `http-request requires-body=false`，只读状态请求 URL 和请求头，保存候选凭据后原样 `$done({})` 放行；不读取 App 响应、没有密码库或额外请求。候选由独立运行的状态查询验证后才替换旧会话。依据为 [Loon 官方脚本类型](https://nsloon.app/docs/Script/)和 [Script API](https://nsloon.app/docs/Script/script_api/)。获取仍需要临时 MitM，必须获取后关闭。
+
+R3 用户日志另有普通签到业务码 420000，未获得可信定义。100014/420000 自动签到失败尚未解决。R4 手机页面恢复及临时获取兼容性待实测；52 项本地模拟测试只能证明逻辑和模拟 API 下的放行行为。
