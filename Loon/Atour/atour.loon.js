@@ -6759,7 +6759,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
 (async function () {
   "use strict";
   var TITLE = "亚朵签到";
-  var VERSION = "2026.10.04.2";
+  var VERSION = "2026.10.04.3";
   var KEY = "atour_loon_session_v1";
   var BASE = "https://miniapp.yaduo.com";
   var INDEX = "/atourlife/signIn/indexInfoV2";
@@ -6778,8 +6778,29 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     var mode = header(headers, "x-encryption").trim();
     return !mode || mode === "0" ? "none" : mode === "1" ? "SM2" : mode === "2" ? "AES" : "unknown";
   }
+  function verificationHeaders(headers) {
+    return ["Lotnumber", "Captchaoutput", "Passtoken", "Gentime", "Lacktype"].filter(function (name) { return !!header(headers, name); }).map(function (name) { return name.toLowerCase(); }).join(",") || "none";
+  }
   function replyDetail(reply) {
-    return reply.error ? "result=error reason=" + reply.error : "retcode=" + reply.code;
+    return reply.error ? "result=error reason=" + reply.error : "retcode=" + reply.code + " retmsgPresent=" + !!reply.messagePresent + " retmsgTags=" + (reply.messageTags && reply.messageTags.length ? reply.messageTags.join(",") : "unclassified");
+  }
+  function messageTags(value) {
+    // 只返回固定的关键词标签，绝不返回 retmsg 原文或其中的账号/凭据。
+    // 标签表示文本命中，不能当作业务码定义；同一业务码可能有不同错误文字。
+    if (typeof value !== "string" || value.length > 4096) return [];
+    var rules = [
+      ["signature", /签名|signature/i],
+      ["verification", /验证码|人机验证|captcha|geetest/i],
+      ["login", /登录|登陆|token.{0,8}(?:过期|无效|失效|expired|invalid)/i],
+      ["rate_limit", /频繁|限流|频次|次数上限|too.many|rate.limit/i],
+      ["activity", /活动.{0,8}(?:结束|下线|未开始|失效)/i],
+      ["already_signed", /已签到|已经签到|重复签到|already.{0,12}sign/i],
+      ["parameters", /参数|parameter|argument/i],
+      ["server", /繁忙|维护|系统异常|服务器异常|internal.{0,8}error/i],
+      ["risk_control", /风控|风险|安全验证|risk|anti.bot/i],
+      ["device", /设备|指纹|device|fingerprint/i]
+    ];
+    return rules.filter(function (rule) { return rule[1].test(value); }).map(function (rule) { return rule[0]; });
   }
   function tell(subtitle, message) {
     trace("notice", subtitle + "；" + message);
@@ -6905,7 +6926,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
       if (typeof data.retcode !== "number" && !(typeof data.retcode === "string" && /^-?\d+$/.test(data.retcode))) return { error: "接口数据结构变化" };
       var code = Number(data.retcode);
       if (!Number.isSafeInteger(code)) return { error: "接口数据结构变化" };
-      return { code: code, result: data.result };
+      return { code: code, result: data.result, messagePresent: typeof data.retmsg === "string" && !!data.retmsg, messageTags: messageTags(data.retmsg) };
     } catch (_) { return { error: encryption && encryption !== "0" ? "响应解密失败，需要核对协议适配" : "响应不是有效 JSON" }; }
   }
   function complete(result) {
@@ -6932,7 +6953,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     var parsed = parseUrl($request.url);
     if (!parsed) { trace("capture.skip", "reason=unsupported_url_or_query"); return; }
     var http = Number($response.status || $response.statusCode);
-    trace("capture.response", "endpoint=" + endpoint(parsed.path) + " HTTP=" + (Number.isFinite(http) ? http : "unknown") + " encryption=" + encryptionLabel($response.headers) + " signHeader=" + !!header($request.headers, "At-Client-Sign") + " loginPresent=" + hasLogin(parsed, $request.headers));
+    trace("capture.response", "endpoint=" + endpoint(parsed.path) + " HTTP=" + (Number.isFinite(http) ? http : "unknown") + " encryption=" + encryptionLabel($response.headers) + " signHeader=" + !!header($request.headers, "At-Client-Sign") + " deviceHeader=" + !!header($request.headers, "At-Client-Code") + " verificationHeaders=" + verificationHeaders($request.headers) + " loginPresent=" + hasLogin(parsed, $request.headers));
     if (http !== 200) { trace("capture.skip", "reason=HTTP_not_200"); return; }
     var response = unpack($response.body, $response.headers);
     trace("capture.decode", replyDetail(response));
@@ -6943,7 +6964,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     var dynamicNames = dynamicQueryNames(parsed);
     if (dynamicNames.length) {
       trace("capture.skip", "reason=dynamic_query fields=" + dynamicNames.join(","));
-      tell("需要参数适配 · R2", (parsed.path === INDEX ? "状态查询" : "签到请求") + "含查询字段：" + dynamicNames.join("、") + "；未保存。字段名已记录，参数值不会输出。请在 App 完成今日签到。");
+      tell("需要参数适配 · R3", (parsed.path === INDEX ? "状态查询" : "签到请求") + "含查询字段：" + dynamicNames.join("、") + "；未保存。字段名已记录，参数值不会输出。请在 App 完成今日签到。");
       return;
     }
     if (!hasLogin(parsed, $request.headers)) { trace("capture.skip", "reason=no_login_credential"); return; }
@@ -6962,7 +6983,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     // 避免每次打开签到页都通知；参数 r 变化不影响账号判断。
     var oldParsed = old && parseUrl(old.url);
     if (!oldParsed || identity(parsed, session.headers) !== identity(oldParsed, old.headers) || !!old.capturedWithDynamicSign !== !!session.capturedWithDynamicSign) {
-      tell(session.capturedWithDynamicSign ? "登录信息已保存，待验证 · R2" : "登录信息已保存 · R2", session.capturedWithDynamicSign ?
+      tell(session.capturedWithDynamicSign ? "登录信息已保存，待验证 · R3" : "登录信息已保存 · R3", session.capturedWithDynamicSign ?
         "已去除 At-Client-Sign。请运行“亚朵签到（手动）”确认服务器接受普通查询；若查询未通过，脚本会停止。" :
         "可运行“亚朵签到（手动）”；每天 08:40 自动运行，验证码需在 App 完成。");
     }
@@ -6977,7 +6998,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
   }
   function get(session, path) {
     return new Promise(function (resolve) {
-      trace("request.start", "endpoint=" + endpoint(path) + " method=GET signHeader=false captchaHeaders=false timeoutMs=15000");
+      trace("request.start", "endpoint=" + endpoint(path) + " method=GET signHeader=false captchaHeaders=false deviceHeader=" + !!header(session.headers, "At-Client-Code") + " timeoutMs=15000");
       try {
         $httpClient.get({ url: freshUrl(session, path), headers: cleanHeaders(session.headers), timeout: 15000, "auto-redirect": false, "auto-cookie": false }, function (error, response, body) {
           if (error) { trace("request.error", "endpoint=" + endpoint(path) + " reason=network_error"); resolve({ error: "网络请求失败" }); return; }
@@ -6995,8 +7016,8 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     if (reply.code === 100042) tell("需要人工验证", "请在亚朵 App 完成验证码和今日签到。脚本已停止，不会重放验证信息。");
     else if (reply.code === 10002 || reply.http === 401 || reply.http === 403) tell("需要重新登录", "请在亚朵 App 重新登录并打开签到页面，更新 Loon 中的登录信息。");
     else if (reply.error) tell(phase, reply.error + "；请打开 App 核对签到状态。");
-    else if (phase === "查询失败" && session && session.capturedWithDynamicSign) tell("普通查询未通过 · R2", "接口业务码 " + reply.code + "；已保存登录信息，但普通查询未通过，未提交签到。该请求可能仍需要动态签名适配，请在 App 完成今日签到。");
-    else tell(phase, "接口业务码 " + reply.code + "；请在 App 核对，必要时更新脚本。");
+    else if (phase === "查询失败" && session && session.capturedWithDynamicSign) tell("普通查询未通过 · R3", "接口业务码 " + reply.code + "；已保存登录信息，但普通查询未通过，未提交签到。该请求可能仍需要动态签名适配，请在 App 完成今日签到。");
+    else tell(phase, "接口业务码 " + reply.code + (reply.messageTags && reply.messageTags.length ? "；错误关键词标签 " + reply.messageTags.join(",") : "；错误文字未命中已知标签") + "；请在 App 核对。标签与运行阶段已记录在日志中。");
   }
   async function run() {
     var session = readSession();
@@ -7010,7 +7031,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     if (signed) { var savedNote = saveAudit(session); tell("今日已签到", "服务器已确认今日签到完成" + savedNote + "。"); return; }
     // 只尝试一次普通签到。没有验证码结果或动态签名的伪造/重放。
     var submitted = await get(session, SIGN);
-    if (submitted.error || submitted.code !== 0) { problem(submitted, "签到结果待确认"); return; }
+    if (submitted.error || submitted.code !== 0) { problem(submitted, submitted.error ? "签到结果待确认" : "签到请求未通过"); return; }
     var checked = await get(session, INDEX);
     if (checked.error || checked.code !== 0) { problem(checked, "签到结果待确认"); return; }
     trace("state.after", "todaySigned=" + complete(checked.result));

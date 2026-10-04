@@ -12,11 +12,17 @@ https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/AtourCh
 
 [打开插件文件](https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/AtourCheckIn.plugin) · [查看脚本](https://github.com/shaohuayongji/Script/blob/master/Loon/Atour/atour.loon.js)
 
+## R3 更新（2026-10-04）
+
+用户提供的 R2 运行日志确认：登录信息可用于普通状态查询，返回 HTTP 200、业务码 0、今日未签到；普通签到请求返回 HTTP 200、业务码 100014。当前未找到该码的可靠定义，不能仅凭数字判断签名或验证码原因，尚未验证完整自动签到成功。
+
+R3 在日志中增加 `retmsgPresent` 和 `retmsgTags`：只按服务器错误文字里的关键词输出固定标签，不输出错误原文。`signature` 表示文本命中签名，`verification` 表示验证，`parameters` 表示参数，`risk_control` 表示风险，`server` 表示服务异常；`unclassified` 表示没有命中。标签是文本线索，不是业务码定义，也不表示已经证实问题原因。捕获日志还会记录签名/设备头是否存在、验证码头的固定字段名，所有值仍隐藏。可用来对比 App 正常签到请求。签到业务拒绝会明确提示“签到请求未通过”，不会自动重试。
+
 ## R2 更新（2026-10-04）
 
 旧版只要看到 `At-Client-Sign` 就拒绝保存登录信息。R2 将它移除后保存登录信息，运行时先由服务器的普通状态查询确认可用性；查询失败即停止，不会提交签到。其他可疑查询字段会显示名称供排查。
 
-在 Loon 更新本插件，确认描述以 **R2** 开头。远程脚本地址带 `?v=20261004-2`，用于刷新旧缓存。重新进入 App 签到页获取信息，再运行新增的 **亚朵签到（手动）**。日志首行应包含 `[ATOUR 2026.10.04.2`。
+在 Loon 更新本插件，确认描述以 **R3** 开头。远程脚本地址带 `?v=20261004-3`，用于刷新旧缓存。重新进入 App 签到页获取信息，再运行新增的 **亚朵签到（手动）**。日志首行应包含 `[ATOUR 2026.10.04.3`。
 
 ## 首次配置
 
@@ -36,9 +42,9 @@ https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/AtourCh
 - **签到成功**：提交后状态查询确认今日完成。
 - **需要人工验证**：去亚朵 App 完成验证码和签到。
 - **需要重新登录**：回 App 登录并重新进入签到页，更新本地会话。
-- **登录信息已保存，待验证 · R2**：已移除 `At-Client-Sign`；手动运行以确认普通请求可用。
-- **普通查询未通过 · R2**：服务器拒绝了普通查询，未提交签到；按业务码继续核查，可能需要签名适配。
-- **需要参数适配 · R2**：查询字符串含可疑签名/时效/验证字段，未保存；通知只显示字段名，便于排查。
+- **登录信息已保存，待验证 · R3**：已移除 `At-Client-Sign`；手动运行以确认普通请求可用。
+- **普通查询未通过 · R3**：服务器拒绝了普通查询，未提交签到；按业务码继续核查，可能需要签名适配。
+- **需要参数适配 · R3**：查询字符串含可疑签名/时效/验证字段，未保存；通知只显示字段名，便于排查。
 - **签到结果待确认**：响应丢失、异常或复查未确认；在 App 核对，脚本不会反复提交。
 
 登录 token、Cookie 和必要设备头只保存在手机的 Loon 本地；仓库和通知不保存真实凭据。排查只需提供通知文字、HTTP 状态或业务码，不要分享完整请求或本地存储。
@@ -47,17 +53,17 @@ https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/AtourCh
 
 在 Loon 找到 **亚朵签到（手动）**，执行后打开该脚本的运行日志，复制从 `start mode=checkin` 到 `finish mode=checkin` 的内容。获取登录信息时出错，则提供 **亚朵获取登录信息** 中从 `start mode=capture` 到 `finish mode=capture` 的日志。不同 Loon 版本的入口位置可能不同，以脚本详情里的日志/运行记录入口为准。
 
-每一行包含脚本版本和本次运行编号，记录获取/查询/签到阶段、HTTP 状态、业务码、加密类型，以及服务返回的今日签到状态。可疑查询字段仅记录已知字段名。不会记录请求 URL、Token、Cookie、签名值、验证码值、账号资料、响应正文或原始网络错误。
+每一行包含脚本版本和本次运行编号，记录获取/查询/签到阶段、HTTP 状态、业务码、加密类型、错误文字关键词标签，以及服务返回的今日签到状态。可疑查询字段仅记录已知字段名。不会记录请求 URL、Token、Cookie、签名值、验证码值、账号资料、响应正文或原始网络错误。
 
 例如下面是**模拟的验证码失败日志**，不是实际账号结果：
 
 ```text
-[ATOUR 2026.10.04.2 abc123] start mode=checkin
-[ATOUR 2026.10.04.2 abc123] request.response endpoint=indexInfoV2 HTTP=200 encryption=none
-[ATOUR 2026.10.04.2 abc123] request.decode endpoint=indexInfoV2 retcode=0
-[ATOUR 2026.10.04.2 abc123] state.before todaySigned=false
-[ATOUR 2026.10.04.2 abc123] request.decode endpoint=signIn retcode=100042
-[ATOUR 2026.10.04.2 abc123] finish mode=checkin
+[ATOUR 2026.10.04.3 abc123] start mode=checkin
+[ATOUR 2026.10.04.3 abc123] request.response endpoint=indexInfoV2 HTTP=200 encryption=none
+[ATOUR 2026.10.04.3 abc123] request.decode endpoint=indexInfoV2 retcode=0
+[ATOUR 2026.10.04.3 abc123] state.before todaySigned=false
+[ATOUR 2026.10.04.3 abc123] request.decode endpoint=signIn retcode=100042
+[ATOUR 2026.10.04.3 abc123] finish mode=checkin
 ```
 
 这些脚本日志可用于反馈。请不要开启全量 HTTP 抓包后发送完整请求，也不要发送 Loon 本地存储内容。
@@ -66,7 +72,7 @@ https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/AtourCh
 
 订阅和脚本地址使用 `master` 分支。仓库更新后，在 Loon 中更新插件，并确认远程脚本同步到最新版本；GitHub Raw 可能短暂缓存。若无法下载，先确认设备能访问 `raw.githubusercontent.com`。
 
-2026-10-04：本地 **51 项模拟测试通过**，已核对官方公开前端和匿名只读接口。尚未在你的真实账号、iPhone/Loon 上实测，合成加密样本也不代表真实账号响应。首次使用须手动验证。
+2026-10-04：本地 **52 项模拟测试通过**，已核对官方公开前端和匿名只读接口。用户日志已确认真实账号状态查询成功，但普通签到提交返回 100014；尚未验证完整自动签到成功，合成加密样本也不代表真实账号加密响应。首次使用须手动验证。
 
 公开接口依据及历史脚本核查见 [source-notes.md](source-notes.md)，测试边界见 [verification.md](verification.md)。[第三方标准库与许可](THIRD_PARTY_NOTICES.md)随单文件脚本内置保留。[本地安装方式](LOCAL-INSTALL.md)可作为不用远程订阅时的备选。
 
