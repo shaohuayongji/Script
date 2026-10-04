@@ -1,0 +1,63 @@
+# 亚朵 Loon 签到：来源与验证记录
+
+核查日期：2026-10-04（Asia/Shanghai）。本文记录公开来源和验证边界，不保存账号 token、Cookie、验证码或完整请求。所有网络探测均为公开静态文件或未登录的只读查询；没有在服务器执行签到、抽奖、兑换、登录或发送验证码。
+
+## GitHub 历史脚本
+
+- 原作者 [Sliverkiss 的亚朵 Gist](https://gist.github.com/Sliverkiss/2e2093bfd5f524d58c8e90fed9beacfd) 创建于 `2023-10-16T08:21:53Z`；GitHub API 显示最近修订 [3a62a89ca16225945b7db55f274b20bffef84580](https://gist.github.com/Sliverkiss/2e2093bfd5f524d58c8e90fed9beacfd/3a62a89ca16225945b7db55f274b20bffef84580) 提交于 `2023-11-23T06:55:23Z`。其仍可审查的早期修订 [e399523e428f3c173ec4b95c892725006c3128ff](https://gist.github.com/Sliverkiss/2e2093bfd5f524d58c8e90fed9beacfd/e399523e428f3c173ec4b95c892725006c3128ff) 提交于 `2023-10-16T08:21:52Z`。这是修订时间，不代表现在的接口有效性。
+- [jivei/Surge 的 `js/atour.js` 镜像](https://github.com/jivei/Surge/blob/main/js/atour.js) 文件提交记录为 [f84ffb53d17c3ce1899ca8fefd964f7d2db29fbd](https://github.com/jivei/Surge/commit/f84ffb53d17c3ce1899ca8fefd964f7d2db29fbd)，日期 `2023-09-16T12:41:23Z`。脚本头写初始日期 `2023-08-06`、修复通知及增加抽奖日期 `2023-08-08`；后两者是作者注释，不是仓库当前维护证明。
+- 原脚本保存手动签到请求的全部请求头和查询字符串，随后以 GET 重放 `/atourlife/signIn/signIn`；以 `retcode === 0` 判定业务成功，并读取 `result.debrisDesc`。它另执行 POST 抽奖接口 `/signIn/lottery`。
+- 旧教程引用的 [Sliverkiss/helloworld 原始路径](https://raw.githubusercontent.com/Sliverkiss/helloworld/master/Study/adjd.js) 在本次访问返回 HTTP 404。原作者路径已删除和业务签到接口失效是不同结论。
+- 新 Loon 实现仅用于签到和状态检查，须避免把旧脚本的自动抽奖、旧依赖环境、一次性验证码头整体搬入。
+
+## 当前官方前端证据
+
+[亚朵官网会员 H5 首页](https://wechat.yaduo.com/hy/) 在核查日引用 `client-hybrid-h5/prod/20260917191702` 构建。目录时间、脚本中的 Sentry release 标识均属于官方构建标识，不能单独替代真实账号实测。
+
+主要公开源码来源：
+
+- [通用客户端 `app.32fbbca238.js`](https://oss-front-code-prod-c.yaduo.com/client-hybrid-h5/prod/20260917191702/static/js/app.32fbbca238.js)
+- [签到页 `activity-signEveryDay.32fbbca238.js`](https://oss-front-code-prod-c.yaduo.com/client-hybrid-h5/prod/20260917191702/static/js/activity-signEveryDay.32fbbca238.js)
+- [客户端依赖 `chunk-vendors.32fbbca238.js`](https://oss-front-code-prod-c.yaduo.com/client-hybrid-h5/prod/20260917191702/static/js/chunk-vendors.32fbbca238.js)
+- [官方签到页入口](https://wechat.yaduo.com/hy/signEveryDay)
+
+当前路由名为 `signEveryDay`，标题为“签到集拼图”。服务 base URL 为 `https://miniapp.yaduo.com/atourlife`。官方代码仍调用下表中的路径：
+
+| 请求 | 用途 | 官方前端读取的结果字段 |
+| --- | --- | --- |
+| GET `/signIn/indexInfoV2` | 查询签到首页和今日状态 | `result.todaySignInComplete`、`continuousSignInInfo`、`debrisInfo`、`collectNum`、`canExchangeNum`、`prizeName` |
+| GET `/signIn/signIn` | 执行签到（会改变账号状态） | `result.debrisDesc`、`prizeDesc`、`needLottery` |
+| GET `/signIn/signInLog` | 查询签到日历 | `result.allNum`、`continueSignInNum`、`signInDate`、`today` |
+
+通用 GET 请求的公开参数名为 `token`、`platType`、`appVer`、`channelId`、`activitySource`、`activityId`、`activeId`、`clientId` 和随机数 `r`。当前 H5 默认 `channelId` 为 `300001`。登录身份应由用户自己的正常客户端流量在 Loon 本机保存；本文没有任何参数实值。
+
+## 验证码、签名与登录限制
+
+官方签到页创建时初始化极验 4（type 为 `sign`），点击“立即签到”调用 `showCaptcha`。完成验证后，客户端调用 `getValidate`，再把 `Lotnumber`、`Captchaoutput`、`Passtoken`、`Gentime` 放入签到请求头。`100042` 是官方验证码模块识别的验证要求码，`10002` 是通用客户端处理的登录失效码。
+
+这些验证结果具有一次性或时效性；新脚本不应重复使用它们，也不应伪造缺失验证字段。官方 `Lacktype` 是正常客户端在验证码 SDK 网络异常时记录的故障信息，不能视为可靠的自动签到方案。遇到验证要求应停止并提醒用户回亚朵 App 完成正常验证。
+
+通用客户端会附同盾指纹 `At-Client-Code`。`At-Client-Sign` 只有调用参数 `isNeedTdSign` 为 true 时才由同盾 SDK 生成；本次读取的签到页面未传这个参数，默认不生成此签名。已有签名或验证结果不能假定可以跨接口、跨日期无限重放。
+
+## 响应加密
+
+官方通用响应拦截器按 `x-encryption` 或 `X-Encryption` 选择解析方式：
+
+- 值 `1`：模块 `311` 的解密函数。Base64URL 转普通 Base64 并补齐 padding，得到字节后转十六进制，检查并去掉非压缩点前缀 `04`，再使用公开客户端内置的 SM2 常量和 `sm2.doDecrypt(..., 0)`。模式 `0` 为 `C1C2C3`；依赖实现以 SM3 验证 C3，失败返回空结果。
+- 值 `2`：模块 `109` 的 AES 解密函数。同样先规范化 Base64URL，然后使用 AES-256-CBC、PKCS7 padding 和公开客户端内置的 UTF-8 key/IV 常量，结果按 UTF-8 文本及 JSON 解析。
+- 这些常量位于公开官网 JavaScript，属于通用客户端协议数据，并非用户账号凭据；本文不重复抄录值，实施可从对应模块核对。
+- 在本次读取的 app、签到页及 vendor 代码中，没有发现可请求明文响应的 header 或 query 参数。正常客户端行为是读取响应头并完成解密。
+- 如果加密模式、密文结构、完整性检查或 JSON 结构不符合预期，应报告解析/协议错误，不能当作签到成功或直接归类为登录失效。
+
+## 实际只读探测及结论边界
+
+2026-10-04 09:44（中国时间），不带账号登录信息访问只读接口：
+
+- `/signIn/indexInfoV2`：HTTP 200，返回业务 JSON，`retcode: 10003`、`result: null`，消息为“哎呀！真抱歉,朵儿一时手忙脚乱出了些小问题~”。
+- `/signIn/signInLog`：HTTP 405，返回阿里 Tengine 防护 HTML。
+
+09:48 的 `/signIn/indexInfoV2` 匿名响应样本再次为 HTTP 200、同一 `retcode: 10003`；Content-Type 为 `text/json;charset=UTF-8`，没有 `x-encryption` 响应头。匿名样本未观察到真正的加密响应，因而加密支持只能用正常协议的合成样本验证，不能声称已成功解密真实账号响应。
+
+缺少登录参数、匿名环境、防护限制都可能影响这些结果。上述结果不能证实签到接口失效，也不能证实无人值守签到有效。当前官方页面仍包含签到接口是静态证据；真实可用性必须由用户自己的 Loon 和账号运行结果验证。
+
+因此交付应明确区分：公开代码核查、模拟测试、匿名只读探测、真实账号签到实测。脚本成功还应尽可能经 `/signIn/indexInfoV2` 的 `todaySignInComplete` 再次确认，遇验证码、登录失效、加密/结构变化即提示需要用户处理。

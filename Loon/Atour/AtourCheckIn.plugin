@@ -1,0 +1,9 @@
+#!name=亚朵签到
+#!desc=亚朵 App 签到页获取登录信息；每日 08:40 查询并尝试签到；要求验证码时需在 App 完成。首次启用请手动运行确认。
+
+[Script]
+http-response ^https://miniapp\.yaduo\.com/atourlife/signIn/(?:indexInfoV2|signIn)(?:\?|$) script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js,requires-body=true,binary-body-mode=false,timeout=10,tag=亚朵获取登录信息,enable=true
+cron "40 8 * * *" script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js,timeout=90,tag=亚朵签到,enable=true
+
+[Mitm]
+hostname=miniapp.yaduo.com
