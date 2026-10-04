@@ -1,5 +1,5 @@
 #!name=亚朵获取登录信息（本地脚本）
-#!desc=R5：临时启用。只读取状态请求的登录信息，不读取响应正文。收到候选信息通知后关闭本插件，日常仅启用签到插件。
+#!desc=R6：临时启用。只读取状态请求的登录信息，不读取响应正文。收到候选信息通知后关闭本插件，日常仅启用签到插件。
 
 [Script]
 http-request ^https://miniapp\.yaduo\.com/atourlife/signIn/indexInfoV2(?:\?|$) script-path=atour.capture.js,requires-body=false,timeout=5,tag=亚朵获取登录信息,enable=true

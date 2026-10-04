@@ -1,3 +1,4 @@
+var __atourQueryOnly = true;
 /*
 亚朵 Loon 原生签到 · 2026-10-04
 由 build.cjs 生成；可读主逻辑在 src/atour-main.js。

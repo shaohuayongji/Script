@@ -1,15 +1,22 @@
 #!name=亚朵签到
-#!desc=R5：获取、自动、手动签到合并。插件页面可分别开关；获取默认关闭，获取后及时关闭。每日 08:40 运行，验证码需在 App 完成。
+#!desc=R6：增加 App 手动签到诊断和只读状态查询。获取/诊断默认关；诊断只记请求头存在性与 HTTP，不读正文。自动签到 08:40，验证码需在 App 完成。
 
 [Argument]
 capture_enabled = switch,false,tag=获取登录信息（临时）,desc=仅首次获取或登录失效时开启；保存候选信息后关闭此开关。
 auto_enabled = switch,true,tag=自动签到,desc=每天设备本地时间 08:40 运行。
-manual_enabled = switch,true,tag=手动签到,desc=显示“亚朵签到（手动）”入口。
+manual_enabled = switch,true,tag=手动签到,desc=显示手动签到、App 诊断日志和只查询状态入口。
+
+app_diagnostic = switch,false,tag=App 手动签到诊断（临时）,desc=仅排查时开启；在 App 点立即签到后关闭，再运行诊断日志入口。
 
 [Script]
-http-request ^https://miniapp\.yaduo\.com/atourlife/signIn/indexInfoV2(?:\?|$) script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.capture.js?v=20261004-5,requires-body=false,timeout=5,tag=亚朵获取登录信息,argument=[{capture_enabled}],enable={capture_enabled}
-cron "40 8 * * *" script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js?v=20261004-5,timeout=90,tag=亚朵签到,enable={auto_enabled}
-generic script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js?v=20261004-5,timeout=90,tag=亚朵签到（手动）,enable={manual_enabled}
+http-request ^https://miniapp\.yaduo\.com/atourlife/signIn/indexInfoV2(?:\?|$) script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.capture.js?v=20261004-6,requires-body=false,timeout=5,tag=亚朵获取登录信息,argument=[{capture_enabled}],enable={capture_enabled}
+cron "40 8 * * *" script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js?v=20261004-6,timeout=90,tag=亚朵签到,enable={auto_enabled}
+generic script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.loon.js?v=20261004-6,timeout=90,tag=亚朵签到（手动）,enable={manual_enabled}
+
+http-request ^https://miniapp\.yaduo\.com/atourlife/signIn/signIn(?:\?|$) script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.diagnostic.js?v=20261004-6,requires-body=false,timeout=5,tag=亚朵App签到诊断（请求）,argument=[{app_diagnostic}],enable={app_diagnostic}
+http-response ^https://miniapp\.yaduo\.com/atourlife/signIn/signIn(?:\?|$) script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.diagnostic.js?v=20261004-6,requires-body=false,timeout=5,tag=亚朵App签到诊断（响应）,argument=[{app_diagnostic}],enable={app_diagnostic}
+generic script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.diagnostic.js?v=20261004-6,timeout=10,tag=亚朵 App 签到诊断日志,enable={manual_enabled}
+generic script-path=https://raw.githubusercontent.com/shaohuayongji/Script/master/Loon/Atour/atour.status.js?v=20261004-6,timeout=90,tag=亚朵签到状态（只查询）,enable={manual_enabled}
 
 [Mitm]
 hostname=miniapp.yaduo.com
