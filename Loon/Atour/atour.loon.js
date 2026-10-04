@@ -6759,17 +6759,30 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
 (async function () {
   "use strict";
   var TITLE = "亚朵签到";
+  var VERSION = "2026.10.04.2";
   var KEY = "atour_loon_session_v1";
   var BASE = "https://miniapp.yaduo.com";
   var INDEX = "/atourlife/signIn/indexInfoV2";
   var SIGN = "/atourlife/signIn/signIn";
   var intercept = typeof $request !== "undefined";
+  var RUN_ID = Math.random().toString(16).slice(2, 10);
   var finished = false;
   var OMIT = /^(host|content-length|connection|accept-encoding|transfer-encoding|proxy-connection|lotnumber|captchaoutput|passtoken|gentime|lacktype)$/i;
   var DYNAMIC_QUERY = /^(sign|signature|nonce|timestamp|ts|lotnumber|captchaoutput|passtoken|gentime|lacktype)$/i;
 
+  function trace(stage, detail) {
+    console.log("[ATOUR " + VERSION + " " + RUN_ID + "] " + stage + (detail ? " " + detail : ""));
+  }
+  function endpoint(path) { return path === INDEX ? "indexInfoV2" : "signIn"; }
+  function encryptionLabel(headers) {
+    var mode = header(headers, "x-encryption").trim();
+    return !mode || mode === "0" ? "none" : mode === "1" ? "SM2" : mode === "2" ? "AES" : "unknown";
+  }
+  function replyDetail(reply) {
+    return reply.error ? "result=error reason=" + reply.error : "retcode=" + reply.code;
+  }
   function tell(subtitle, message) {
-    console.log(TITLE + "：" + subtitle + "；" + message);
+    trace("notice", subtitle + "；" + message);
     $notification.post(TITLE, subtitle, message);
   }
   function finish() {
@@ -6801,7 +6814,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     var match = /^https:\/\/miniapp\.yaduo\.com(\/atourlife\/signIn\/(?:indexInfoV2|signIn))(?:\?([^#]*))?$/.exec(url);
     if (!match) return null;
     var query = match[2] || "";
-    var params = {};
+    var params = Object.create(null);
     try {
       query.split("&").forEach(function (part) {
         if (!part) return;
@@ -6814,8 +6827,12 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     } catch (_) { return null; }
     return { path: match[1], query: query, params: params };
   }
+  function dynamicQueryNames(parsed) {
+    // 只输出已知字段名，不输出参数值、完整 URL 或任何登录信息。
+    return Object.keys(parsed.params).filter(function (k) { return DYNAMIC_QUERY.test(k); }).map(function (k) { return k.toLowerCase(); }).sort();
+  }
   function hasDynamic(parsed, headers) {
-    return !!header(headers, "At-Client-Sign") || Object.keys(parsed.params).some(function (k) { return DYNAMIC_QUERY.test(k); });
+    return !!header(headers, "At-Client-Sign") || dynamicQueryNames(parsed).length > 0;
   }
   function hasLogin(parsed, headers) {
     return Object.keys(parsed.params).some(function (k) { return /^(token|appToken)$/i.test(k) && !!parsed.params[k]; }) ||
@@ -6902,38 +6919,53 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     // 请求期间可能在 App 切换账号或刷新 token，不能用旧 session 覆盖新登录信息。
     var current = readSession();
     if (!current || identity(parseUrl(current.url), current.headers) !== identity(parseUrl(session.url), session.headers)) {
-      console.log(TITLE + "：运行期间会话已更新，保留新登录信息；本次结果对应运行开始时使用的账号");
+      trace("session.audit", "result=session_changed 保留新登录信息；本次结果对应运行开始时使用的账号");
       return "；运行期间登录信息已更新，本次结果对应原账号";
     }
     current.signedDay = day();
-    if (!$persistentStore.write(JSON.stringify(current), KEY)) console.log(TITLE + "：服务器已确认，本地记录保存失败");
+    if (!$persistentStore.write(JSON.stringify(current), KEY)) trace("session.audit", "result=write_failed 服务器已确认，本地记录保存失败");
+    else trace("session.audit", "result=confirmed_and_saved");
     return "";
   }
   function capture() {
-    if (typeof $response === "undefined" || String($request.method || "GET").toUpperCase() !== "GET") return;
+    if (typeof $response === "undefined" || String($request.method || "GET").toUpperCase() !== "GET") { trace("capture.skip", "reason=not_GET_response"); return; }
     var parsed = parseUrl($request.url);
-    if (!parsed) return;
+    if (!parsed) { trace("capture.skip", "reason=unsupported_url_or_query"); return; }
     var http = Number($response.status || $response.statusCode);
-    if (http !== 200) return;
+    trace("capture.response", "endpoint=" + endpoint(parsed.path) + " HTTP=" + (Number.isFinite(http) ? http : "unknown") + " encryption=" + encryptionLabel($response.headers) + " signHeader=" + !!header($request.headers, "At-Client-Sign") + " loginPresent=" + hasLogin(parsed, $request.headers));
+    if (http !== 200) { trace("capture.skip", "reason=HTTP_not_200"); return; }
     var response = unpack($response.body, $response.headers);
+    trace("capture.decode", replyDetail(response));
     if (response.error) { tell("获取登录信息失败", response.error + "；已有登录信息未被替换。"); return; }
-    if (response.code !== 0) return;
-    if (parsed.path === INDEX && complete(response.result) === null) return;
-    if (hasDynamic(parsed, $request.headers)) {
-      tell("需要动态签名适配", "本次请求含动态签名或时效参数，未保存。请重新打开 App 的签到页面获取普通状态请求。");
+    if (response.code !== 0) { trace("capture.skip", "reason=business_error"); return; }
+    if (parsed.path === INDEX) trace("capture.state", "todaySigned=" + complete(response.result));
+    if (parsed.path === INDEX && complete(response.result) === null) { trace("capture.skip", "reason=unknown_sign_state"); return; }
+    var dynamicNames = dynamicQueryNames(parsed);
+    if (dynamicNames.length) {
+      trace("capture.skip", "reason=dynamic_query fields=" + dynamicNames.join(","));
+      tell("需要参数适配 · R2", (parsed.path === INDEX ? "状态查询" : "签到请求") + "含查询字段：" + dynamicNames.join("、") + "；未保存。字段名已记录，参数值不会输出。请在 App 完成今日签到。");
       return;
     }
-    if (!hasLogin(parsed, $request.headers)) return;
+    if (!hasLogin(parsed, $request.headers)) { trace("capture.skip", "reason=no_login_credential"); return; }
     var session = { url: BASE + INDEX + (parsed.query ? "?" + parsed.query : ""), headers: cleanHeaders($request.headers), savedAt: Date.now() };
+    // 签名头存在不等于该接口强制要求签名。只保留登录信息，绝不持久化或重放签名。
+    // 定时/手动运行先查询状态，由服务器决定普通请求是否可用；失败即停止。
+    if (header($request.headers, "At-Client-Sign")) session.capturedWithDynamicSign = true;
     if (parsed.path === SIGN || complete(response.result) === true) session.signedDay = day();
     var old = readSession();
     if (!$persistentStore.write(JSON.stringify(session), KEY)) {
+      trace("capture.store", "result=failed");
       tell("保存失败", "未能保存登录信息，请检查 Loon 的本地存储后重新打开签到页面。");
       return;
     }
+    trace("capture.store", "result=saved signHeaderStored=false captchaHeadersStored=false requiresOrdinaryQuery=" + !!session.capturedWithDynamicSign);
     // 避免每次打开签到页都通知；参数 r 变化不影响账号判断。
     var oldParsed = old && parseUrl(old.url);
-    if (!oldParsed || identity(parsed, session.headers) !== identity(oldParsed, old.headers)) tell("登录信息已保存", "可在 Loon 中手动运行一次亚朵签到；每天 08:40 自动运行，验证码需在 App 完成。");
+    if (!oldParsed || identity(parsed, session.headers) !== identity(oldParsed, old.headers) || !!old.capturedWithDynamicSign !== !!session.capturedWithDynamicSign) {
+      tell(session.capturedWithDynamicSign ? "登录信息已保存，待验证 · R2" : "登录信息已保存 · R2", session.capturedWithDynamicSign ?
+        "已去除 At-Client-Sign。请运行“亚朵签到（手动）”确认服务器接受普通查询；若查询未通过，脚本会停止。" :
+        "可运行“亚朵签到（手动）”；每天 08:40 自动运行，验证码需在 App 完成。");
+    }
   }
   function freshUrl(session, path) {
     var parsed = parseUrl(session.url);
@@ -6945,28 +6977,35 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
   }
   function get(session, path) {
     return new Promise(function (resolve) {
+      trace("request.start", "endpoint=" + endpoint(path) + " method=GET signHeader=false captchaHeaders=false timeoutMs=15000");
       try {
         $httpClient.get({ url: freshUrl(session, path), headers: cleanHeaders(session.headers), timeout: 15000, "auto-redirect": false, "auto-cookie": false }, function (error, response, body) {
-          if (error) { resolve({ error: "网络请求失败" }); return; }
+          if (error) { trace("request.error", "endpoint=" + endpoint(path) + " reason=network_error"); resolve({ error: "网络请求失败" }); return; }
           var status = Number(response && (response.status || response.statusCode));
+          trace("request.response", "endpoint=" + endpoint(path) + " HTTP=" + (Number.isFinite(status) ? status : "unknown") + " encryption=" + encryptionLabel(response && response.headers));
           if (status !== 200) { resolve({ error: "HTTP " + (Number.isFinite(status) ? status : "异常"), http: status }); return; }
-          resolve(unpack(body, response.headers));
+          var reply = unpack(body, response.headers);
+          trace("request.decode", "endpoint=" + endpoint(path) + " " + replyDetail(reply));
+          resolve(reply);
         });
-      } catch (_) { resolve({ error: "请求未能发出" }); }
+      } catch (_) { trace("request.error", "endpoint=" + endpoint(path) + " reason=dispatch_failed"); resolve({ error: "请求未能发出" }); }
     });
   }
-  function problem(reply, phase) {
+  function problem(reply, phase, session) {
     if (reply.code === 100042) tell("需要人工验证", "请在亚朵 App 完成验证码和今日签到。脚本已停止，不会重放验证信息。");
     else if (reply.code === 10002 || reply.http === 401 || reply.http === 403) tell("需要重新登录", "请在亚朵 App 重新登录并打开签到页面，更新 Loon 中的登录信息。");
     else if (reply.error) tell(phase, reply.error + "；请打开 App 核对签到状态。");
+    else if (phase === "查询失败" && session && session.capturedWithDynamicSign) tell("普通查询未通过 · R2", "接口业务码 " + reply.code + "；已保存登录信息，但普通查询未通过，未提交签到。该请求可能仍需要动态签名适配，请在 App 完成今日签到。");
     else tell(phase, "接口业务码 " + reply.code + "；请在 App 核对，必要时更新脚本。");
   }
   async function run() {
     var session = readSession();
+    trace("session.load", "result=" + (session ? "found" : "missing_or_invalid") + (session ? " capturedWithDynamicSign=" + !!session.capturedWithDynamicSign : ""));
     if (!session) { tell("尚未获取有效登录信息", "请启用抓取规则并打开亚朵 App 的签到页面；保存后再手动运行。"); return; }
     var first = await get(session, INDEX);
-    if (first.error || first.code !== 0) { problem(first, "查询失败"); return; }
+    if (first.error || first.code !== 0) { problem(first, "查询失败", session); return; }
     var signed = complete(first.result);
+    trace("state.before", "todaySigned=" + signed);
     if (signed === null) { tell("查询结果无法识别", "今日状态字段缺失或变化，需要更新适配；未提交签到。"); return; }
     if (signed) { var savedNote = saveAudit(session); tell("今日已签到", "服务器已确认今日签到完成" + savedNote + "。"); return; }
     // 只尝试一次普通签到。没有验证码结果或动态签名的伪造/重放。
@@ -6974,6 +7013,7 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     if (submitted.error || submitted.code !== 0) { problem(submitted, "签到结果待确认"); return; }
     var checked = await get(session, INDEX);
     if (checked.error || checked.code !== 0) { problem(checked, "签到结果待确认"); return; }
+    trace("state.after", "todaySigned=" + complete(checked.result));
     if (complete(checked.result) !== true) { tell("签到结果待确认", "提交已返回，但服务器尚未确认今日完成；请打开 App 核对。"); return; }
     var auditNote = saveAudit(session);
     // 仅输出可识别的碎片数量，不把服务器原文或用户信息送入日志/通知。
@@ -6982,8 +7022,9 @@ return { CryptoJS: this.CryptoJS, sm2: this.sm2 };
     tell("签到成功", "服务器已确认今日完成" + (reward ? "，获得 " + Number(reward[1]) + " 片碎片" : "") + auditNote + "。");
   }
   try {
+    trace("start", "mode=" + (intercept ? "capture" : "checkin"));
     if (intercept) capture(); else await run();
   } catch (_) {
     tell("脚本运行异常", "请核对本地脚本和配置；登录信息不会写入通知或日志。");
-  } finally { finish(); }
+  } finally { trace("finish", "mode=" + (intercept ? "capture" : "checkin")); finish(); }
 })();

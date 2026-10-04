@@ -4,6 +4,7 @@
 [Script]
 http-response ^https://miniapp\.yaduo\.com/atourlife/signIn/(?:indexInfoV2|signIn)(?:\?|$) script-path=atour.loon.js,requires-body=true,binary-body-mode=false,timeout=10,tag=亚朵获取登录信息,enable=true
 cron "40 8 * * *" script-path=atour.loon.js,timeout=90,tag=亚朵签到,enable=true
+generic script-path=atour.loon.js,timeout=90,tag=亚朵签到（手动）,enable=true
 
 [Mitm]
 hostname=miniapp.yaduo.com
